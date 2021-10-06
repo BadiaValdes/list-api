@@ -27,7 +27,6 @@ export class Item {
     list: List;
 
     // One To One
-    @OneToOne(()=> ItemImages, {cascade: true, onDelete:'CASCADE'})
-    @JoinColumn()
+    @OneToOne(()=> ItemImages, {onDelete: "CASCADE", eager: true})
     image: ItemImages
 }

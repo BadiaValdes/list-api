@@ -33,19 +33,30 @@ export class ItemService {
     return this.itemImagesRepository.findOne(id)
   }
 
+  // public updateImateFK(id:string, fk:string){
+  //   let itemDTO = null
+  //   let itemData = this.itemImagesRepository.findOne(fk)
+  //   let itemEnitity = this.itemRepository.create()
+  //   return this.itemImagesRepository.findOne(id).then(
+  //     d => {
+  //       d.item = fk
+  //     }
+  //   )
+  // }
+
   findAll() {
     return this.itemRepository.find();
   }
 
   findOne(id: string) {
-    return `This action returns a #${id} item`;
+    return `This action returnsa a #${id} item`;
   }
 
   update(id: string, updateItemDto: UpdateItemDto) {
-    return `This action updates a #${id} item`;
+    return `This action updatesa a #${id} item`;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} item`;
+  remove(id: string) {
+    return this.itemRepository.delete(id);
   }
 }

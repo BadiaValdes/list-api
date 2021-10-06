@@ -25,7 +25,8 @@ export class ItemImages {
     @Column({type:'varchar',  nullable: true})
     thumbnailName: string
 
-
+    // @OneToOne(() => Item, (item: Item) => item.image, {onDelete: 'CASCADE'})
+    // public item: Item; 
 
     
    

@@ -44,7 +44,7 @@ import { createReadStream } from 'fs';
 export const image_destination_path = './uploads/item-images';
 
 // Disk Sotrage, use for sharp
-/* export const storage = {
+export const storageDisk = {
   storage: diskStorage({
       destination: image_destination_path,
       filename: (req, file, cb) => {
@@ -54,7 +54,7 @@ export const image_destination_path = './uploads/item-images';
       }
   })
 
-} */
+}
 
 // User for mutter sharp
 export const storage = {
@@ -93,10 +93,13 @@ export const uploadResizeImageSecondTest = async (
 
   const filename = `gallery-${Date.now()}.jpeg`;
 
-  let path = join(year.toString(), month.toString());
+  let path = join(image_destination_path, year.toString(), month.toString());
   const sharpOptions = {
     fit: 'contain',
-    background: { r: 255, g: 255, b: 255 },
+    background: { r: 255, g: 255, b: 255 }, 
+    
+      quality: 1
+      
   };
   resizeOBJ.req = req;
   resizeOBJ.filename = file.originalname.split('.')[0];
@@ -104,6 +107,8 @@ export const uploadResizeImageSecondTest = async (
   resizeOBJ.uploadPath = path;
   resizeOBJ.fileUrl = path;
   resizeOBJ.sharpOptions = sharpOptions;
+
+  console.log(resizeOBJ)
 
   resizeOBJ.resize();
 
@@ -115,30 +120,39 @@ export const uploadResizeImage = async (file: Express.Multer.File, ext) => {
 
   sizes.forEach((object) => {
     let size = [];
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = `${today.getMonth() + 1}`.padStart(2, '0');
+  
+    const filename = `gallery-${Date.now()}.jpeg`;
+  
+    let path = join(image_destination_path, year.toString(), month.toString());
+    
 
     size.push(+object.width);
     size.push(+object.height);
     console.log(size);
     let fileName = file.originalname.split('.');
-    readFileAsyc(file.path)
+    let j = readFileAsyc(file.path)
       .then((b: Buffer) => {
         return sharp(b)
-          .resize(+object.width, +object.height) // You can puth directly the width and height
+          .resize(+object.width, +object.height, {fit:'cover'}) // You can puth directly the width and height
           .toFile(
             join(
               process.cwd(),
-              image_destination_path +
+              path +
                 '/' +
                 fileName[0] +
                 '.' +
                 object.path +
                 '.' +
-                fileName[1],
+                'png',
             ),
           );
       })
       .then(console.log)
       .catch(console.error);
+      return j;
   });
 };
 @Controller('item')
@@ -159,6 +173,7 @@ export class ItemController {
     //uploadResizeImage(file, ext);
     let z = null;
     let data = uploadResizeImageSecondTest(file, ext, req);
+    //let data = (file,ext)
     await data.then((d) => {
       z = d;
     });
@@ -167,11 +182,12 @@ export class ItemController {
 
     let createItemImageDto: CreateItemImageDto;
     let jj = this.itemService.createImageEntity(createItemImageDto);
+
     jj.largeName = z[0].large.filename;
 
     jj.originalName = z[0].original.filename;
 
-    jj.relativePath = z[0].large.path.slice(0, 8);
+    jj.relativePath = z[0].large.path.slice(image_destination_path.length, image_destination_path.length + 8);
     jj.mediumName = z[0].medium.filename;
 
     jj.thumbnailName = z[0].thumbnail.filename;
@@ -207,8 +223,22 @@ export class ItemController {
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.itemService.remove(+id);
+    return this.itemService.remove(id);
   }
+
+    // Download fle
+    @Get('image_stream/:imageName')
+    getFile(@Res() res) {
+      const stream = createReadStream(join(process.cwd(), image_destination_path, 'sasa.jpeg'));
+      const transform = sharp().resize(800).withMetadata().png({quality: 1 }).blur(1)
+      res.set("Content-Type", `image/png`)
+      stream.pipe(transform).pipe(res)
+      
+      // const file = createReadStream(
+      //   join(process.cwd(), image_destination_path + '/' + imagename),
+      // );
+      return new StreamableFile(stream);
+    }
 
   @Get('image/:imagename')
   async findImage(
@@ -255,7 +285,7 @@ export class ItemController {
         break;
     }
 
-    console.log(imageObject);
+    console.log(imageToShow);
 
     return res.sendFile(
       join(
@@ -268,12 +298,5 @@ export class ItemController {
     );
   }
 
-  // Download fle
-  @Get('image_stream/:imagename/')
-  getFile(@Param('imagename') imagename): StreamableFile {
-    const file = createReadStream(
-      join(process.cwd(), image_destination_path + '/' + imagename),
-    );
-    return new StreamableFile(file);
-  }
+
 }
