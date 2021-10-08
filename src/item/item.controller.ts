@@ -12,6 +12,7 @@ import {
   StreamableFile,
   Req,
   Query,
+  NotFoundException,
 } from '@nestjs/common';
 import { ItemService } from './item.service';
 import { CreateItemDto } from './dto/create-item.dto';
@@ -40,8 +41,131 @@ import { diskStorage, memoryStorage } from 'multer';
 
 import path = require('path');
 import { createReadStream } from 'fs';
+import {finished, pipeline} from 'stream'
+import { throws, rejects } from 'assert';
 
 export const image_destination_path = './uploads/item-images';
+
+export interface sharpImageOptions {
+  heigth?: number,
+  width?: number,
+  outPutFormat? : "jpeg" | "png" | "webp" | "gif" | "jp2" | "tiff" | "avif" | "heif" | "reaw" | "tile"
+  quality?: number,
+  squareSize?: number,
+  //cover, contain, fill, inside or outside
+  fit? : 'cover' | 'contain' | 'fill' | 'insede' | 'outside',
+}
+
+export interface sharpImageOperations {
+  applyImageOperations: boolean,
+  rotate? : number,
+  flip? : boolean, // Flip by Y
+  flop? : boolean, // Flip by X
+  blur? : number,
+  sharpen? : {
+    sigma,
+    flat?,
+    jagged?,
+  },
+  median?: number,
+
+}
+
+export const defaultSharpOptions : sharpImageOptions = {
+  heigth: 500,
+  width: 500,
+  outPutFormat: "webp",
+  quality: 80,
+  squareSize: null,
+  fit: 'cover'
+}
+
+export const defaultSharpImageOperations : sharpImageOptions = {
+
+}
+
+export function readFilePassedBy(imagePath){
+  return fileS.createReadStream(imagePath)     
+}
+
+export function setSharpImageOperation(sharp, options){
+
+}
+
+export function createSharpFilter(options: sharpImageOptions = defaultSharpOptions ){
+  try{
+  let sharkSharp = sharp().resize(options.width, options.heigth, {fit: options.fit}).toFormat(
+    options.outPutFormat,
+    {
+      quality: options.quality
+    }
+  )
+
+
+  sharkSharp.sharpen(5, 0.5, 3)
+  return sharkSharp
+}
+catch(e){
+  console.log(e)
+  return  null
+}
+}
+
+export async function sharpImageProcess(imagePath, options: sharpImageOptions , name, res  ) { 
+  console.log('aqui')
+   try{
+     let fileType = options? options.outPutFormat : defaultSharpOptions.outPutFormat
+     let fileImage = readFilePassedBy(imagePath)
+     console.log('aqui1')
+     fileImage.on('error', (e) => {
+       if(e){
+        console.log('File not found')
+        res.writeHeader(404,"File not found")
+        res.end('File not found')
+       }
+       else{
+        
+       }
+        
+     })   
+     
+     fileImage.on('open', _ => {
+      res.set({"Content-Type": `image/${fileType}`, "Content-Disposition": `filename=${name}`})
+     })
+       
+     console.log('aqui2')
+     let sharpFilter = createSharpFilter()
+
+    
+
+    
+     
+      
+     
+     return new StreamableFile(fileImage.pipe(sharpFilter).pipe(res))
+     
+     
+      
+    
+     
+     
+    }
+    catch(e){
+   
+    }
+
+   
+
+    
+     
+  
+
+    
+  
+  
+
+
+}
 
 // Disk Sotrage, use for sharp
 export const storageDisk = {
@@ -187,7 +311,7 @@ export class ItemController {
 
     jj.originalName = z[0].original.filename;
 
-    jj.relativePath = z[0].large.path.slice(image_destination_path.length, image_destination_path.length + 8);
+    jj.relativePath = z[0].large.path.slice(image_destination_path.length - 1, image_destination_path.length - 1 + 8);
     jj.mediumName = z[0].medium.filename;
 
     jj.thumbnailName = z[0].thumbnail.filename;
@@ -227,17 +351,83 @@ export class ItemController {
   }
 
     // Download fle
-    @Get('image_stream/:imageName')
-    getFile(@Res() res) {
-      const stream = createReadStream(join(process.cwd(), image_destination_path, 'sasa.jpeg'));
-      const transform = sharp().resize(800).withMetadata().png({quality: 1 }).blur(1)
-      res.set("Content-Type", `image/png`)
-      stream.pipe(transform).pipe(res)
+    @Get('image_file/:imageName')
+    async getFileImage( @Param('imageName') imageName, @Res() res, @Query() query,) {
+      let imageFromDB = this.itemService.findOneImage(imageName)
+      let imageData = null;
+      await imageFromDB.then(data => {
+        imageData = data;
+      })
+
+     
       
+      return sharpImageProcess(join(process.cwd(), image_destination_path, imageData.relativePath, 'original' ,imageData.originalName), null , imageData.originalName, res)
+      
+    }
+    @Get('image_stream/:imageName')
+    async getFile( @Param('imageName') imageName, @Res() res, @Query() query,) {
+      let fileType = query['fileType'] || 'jpeg';
+      let quality = query['quality'] || 80;
+      let squareSize = parseInt(query['squareSize']) || 800;
+      let blur =  parseInt(query['blur']);
+
+      //cover, contain, fill, inside or outside
+      let fit = query['fit'] || 'cover';
+
+      let width = 0;
+      let height = 0;
+      // If exist
+
+
+
+      
+
+      let imageFromDB = this.itemService.findOneImage(imageName)
+      let imageData = null;
+      await imageFromDB.then(data => {
+        imageData = data;
+      })
+      const stream = createReadStream(join(process.cwd(), image_destination_path, imageData.relativePath, 'original' ,imageData.originalName));
+      
+      const transform = sharp();
+      let originaInfo = null
+
+      if(query['width'] && query['height'])
+        {
+          width =parseInt(query['width']);
+          height =parseInt(query['height']);
+        }
+        else if(!query['squareSize'])
+        {width =null
+          height = null}
+          
+        else 
+          width = height = squareSize
+
+     
+      
+      transform.resize(width,height, {fit: fit}).toFormat(fileType, {
+        quality: parseInt(quality),
+      })
+
+      if(blur >= 0.3){
+        transform.blur(blur)
+      }
+
+      // Put the correct name on the image
+      res.set({"Content-Type": `image/${fileType}`, "Content-Disposition": `filename=${imageData.originalName}`})
+      // Content Dipostion -> Donwload res.set({"Content-Type": `image/${fileType}`, "Content-Disposition": "attachment; filename=filename.jpg"})
+      
+      stream.pipe(transform).pipe(res)
+
+
+    
+     
       // const file = createReadStream(
       //   join(process.cwd(), image_destination_path + '/' + imagename),
       // );
-      return new StreamableFile(stream);
+      return new StreamableFile(stream)
+      
     }
 
   @Get('image/:imagename')
@@ -267,15 +457,18 @@ export class ItemController {
     let pathBeforeImage = null;
 
     switch (query['type']) {
-      case ('thumbnail' || 'thumb'):
+      case 'thumb':
+      case 'thumbnail':
         imageToShow = imageObject.thumbnailName;
         pathBeforeImage = 'thumbnail';
         break;
-      case ('large' || 'lg'):
+      case 'lg':
+      case 'large':
         imageToShow = imageObject.largeName;
         pathBeforeImage = 'large';
         break;
-      case ('medium' || 'md'):
+      case 'md':
+      case 'medium':
         imageToShow = imageObject.mediumName;
         pathBeforeImage = 'medium';
         break;
