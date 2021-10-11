@@ -46,6 +46,31 @@ import { throws, rejects } from 'assert';
 
 export const image_destination_path = './uploads/item-images';
 
+export interface sharpColorOptions {
+  /** WRITE!!!!!
+   *  
+   * Values: red, green and blue. The values must be over 0 and under 255
+   */
+  tint? : {
+    r: number, 
+    g: number,
+    b: number,
+  },
+
+  greyscale?: true,
+  grayscale?: true,
+  pipelineColourspace? : 'multiband' | "b-w" | "histogram" | "xyz" | "lab" | "cmyk" | "labq" | "rgb" | "cmc" | "lch" | "labs" | "srgb" | "yxy" | "fourier" | "rgb16" | "grey16" | "matrix" | "scrgb" | "hsv" | "last",
+  toColourspace? : 'multiband' | "b-w" | "histogram" | "xyz" | "lab" | "cmyk" | "labq" | "rgb" | "cmc" | "lch" | "labs" | "srgb" | "yxy" | "fourier" | "rgb16" | "grey16" | "matrix" | "scrgb" | "hsv" | "last",
+
+}
+
+export interface sharpChannelOptions {
+  removeAlpha?: true,
+  ensureAlpha?: 0 | 1,
+  extractChannel?: 'green' | 'red' | 'blue' | 'alpha',
+  bandbool? : 'and' | 'or' | 'eor'
+}
+
 export interface sharpImageOptions {
   heigth?: number,
   width?: number,
@@ -57,18 +82,80 @@ export interface sharpImageOptions {
 }
 
 export interface sharpImageOperations {
+  /** Activates or deactivates the sharpImageOperations function 
+   *  
+   * Values: true or false
+   */
   applyImageOperations: boolean,
+
+  /** Rotate the image 
+   *  
+   * If an angle is provided, it is converted to a valid positive degree rotation. For example, -450 will produce a 270deg rotation.
+   * 
+   * Value: Number
+   */
   rotate? : number,
-  flip? : boolean, // Flip by Y
-  flop? : boolean, // Flip by X
-  blur? : number,
+
+  /** Flip the image about the vertical Y axis. 
+   *  
+   * Value: true or false
+   */
+  flip? : true, // Flip by Y
+
+  /** Flip the image about the horizontal X axis. 
+   *  
+   * Value: true or false
+   */
+  flop? : true, // Flip by X
+
+  /** Blur the image.
+   * 
+   *  When used without parameters, performs a fast, mild blur of the output image.
+   * 
+   *  Value between 0.3 and 1000
+   */
+  blur? : number, // > 0.3 - 100000
+
+
   sharpen? : {
     sigma,
     flat?,
     jagged?,
   },
   median?: number,
-
+  gamma?: {
+    gamma: number,// 1.0 - 3.0
+    gammaOut?: number, // 1.0 - 3.0
+  }, 
+  
+  negate?: true,
+  normalise? : true,
+  normalize? : true,
+  convolve? : {
+    width : number,
+    height : number,
+    kernel : number[], // width x height length
+    scale? : number,
+    offset? : number,
+  },
+  threshold? : {
+    threshold: number,
+    options? :{
+      greyscale: boolean, 
+      grayscale: boolean
+    }
+  },
+  linear?: {
+    multiplier?: number,
+    offset?: number,
+  },
+  recomb?: [[number, number, number],[number, number, number],[number, number, number]],
+  modulate?:{
+    brightness?: number, // increase brightness by a factor of 2
+    saturation?: number,
+    hue?: number,
+    lightness?: number,
+  }
 }
 
 export const defaultSharpOptions : sharpImageOptions = {
@@ -80,20 +167,184 @@ export const defaultSharpOptions : sharpImageOptions = {
   fit: 'cover'
 }
 
-export const defaultSharpImageOperations : sharpImageOptions = {
 
+
+
+export const defaultSharpImageOperations : sharpImageOperations = {
+applyImageOperations: true,
 }
 
 export function readFilePassedBy(imagePath){
   return fileS.createReadStream(imagePath)     
 }
 
-export function setSharpImageOperation(sharp, options){
+export function setSharpColorOptions(sharp, colorOptions:sharpColorOptions){
+  if(colorOptions.tint != undefined){
+    if((colorOptions.tint.r && colorOptions.tint.g && colorOptions.tint.b) >= 0 || (colorOptions.tint.r && colorOptions.tint.g && colorOptions.tint.b) <= 255){
+      sharp.tint({
+        r: colorOptions.tint.r,
+        g:colorOptions.tint.g,
+        b: colorOptions.tint.b,
+      })
+    }
+    else{
+      console.error('The RGB values must be between 0 and 255')
+    }
+  }
 
+  if(colorOptions.grayscale != undefined){
+    sharp.grayscale(colorOptions.grayscale)
+  }
+
+  if(colorOptions.greyscale != undefined){
+    sharp.greyscale(colorOptions.greyscale)
+  }
+
+  if(colorOptions.pipelineColourspace != undefined){
+    sharp.pipelineColourspace(colorOptions.pipelineColourspace)
+  }
+
+  if(colorOptions.toColourspace != undefined){
+    sharp.toColourspace(colorOptions.toColourspace)
+  }
+
+  return sharp
 }
 
-export function createSharpFilter(options: sharpImageOptions = defaultSharpOptions ){
+export function setSharpChannelOptions(sharp, channelsOptions: sharpChannelOptions){
+  if(channelsOptions.removeAlpha != undefined){
+    sharp.removeAlpha(true)
+  }
+  if(channelsOptions.ensureAlpha != undefined){
+    sharp.ensureAlpha(channelsOptions.ensureAlpha)
+  }
+  if(channelsOptions.extractChannel != undefined){
+    sharp.extractChannel(channelsOptions.extractChannel)
+  }
+  if(channelsOptions.bandbool!=undefined){
+    switch (channelsOptions.bandbool) {
+      case 'and':
+        sharp.bandbool(sharp.bool.and)
+        break;
+        case 'or':
+          sharp.bandbool(sharp.bool.or)
+          break;
+          case 'eor':
+            sharp.bandbool(sharp.bool.eor)
+            break;
+      default:
+        break;
+    }
+  }
+  return sharp
+}
+
+export function setSharpImageOperation(sharp, options: sharpImageOperations){
+
+  if(options.blur != undefined){
+    if(options.blur >= 0.3 && options.blur < 1000)
+    sharp.blur(options.blur);
+  else
+    console.error("The blur value is out of bound")
+  }
+
+  if(options.convolve != undefined){
+    if(options.convolve.kernel.length == (options.convolve.width * options.convolve.height))
+    {
+      sharp.convolve({
+        width: options.convolve.width,
+        height: options.convolve.height,
+        kernel: options.convolve.kernel,
+        scale: options.convolve.scale,
+        offset: options.convolve.offset,
+      })
+    }
+    else{
+      console.error(`Kernel length higher or lower than ${options.convolve.width * options.convolve.height}`)
+    }
+  }
+
+  if(options.flip != undefined){
+    sharp.flip(options.flip)
+  }
+
+  if(options.flop != undefined){
+    sharp.flop(options.flop)
+  }
+
+  if(options.gamma != undefined){
+    if(options.gamma.gamma >= 1.0 && options.gamma.gamma <= 3.0){
+      sharp.gamma(options.gamma.gamma, (options.gamma.gammaOut >= 1.0 && options.gamma.gammaOut <=3.0)? options.gamma.gammaOut : undefined)
+    }
+    else{
+      console.error("The gamma value must be between 1.0 and 3.0. In case that you are using gammaOut, the value must be in the same range")
+    }
+  } 
+
+  if(options.linear != undefined){
+    sharp.linear(options.linear.multiplier, options.linear.offset)
+  }
+
+  if(options.median != undefined){
+    sharp.median(options.median)
+  }
+
+  if(options.modulate != undefined){
+    sharp.modulate({
+      brightness: options.modulate.brightness,
+      hue: options.modulate.hue,
+      saturation: options.modulate.saturation,
+      lightness: options.modulate.lightness,
+    })
+  }
+
+  if(options.negate != undefined){
+    sharp.negate(true)
+  }
+
+  if(options.normalise != undefined){
+    sharp.normalise(true)
+  }
+
+  if(options.normalize != undefined){
+    sharp.normalize(true)
+  }
+
+  if(options.recomb != undefined){
+    sharp.recomb(options.recomb)
+  }    
+
+  if(options.rotate != undefined){
+    sharp.rotate(options.rotate)
+  }
+
+  if(options.sharpen != undefined)
+  {
+    sharp.sharpen(options.sharpen.sigma, options.sharpen.flat, options.sharpen.jagged)
+  }
+
+  if(options.threshold != undefined){
+    if(options.threshold.threshold >= 0 && options.threshold.threshold < 255)
+    sharp.threshold(options.threshold.threshold, {
+      greyscale: options.threshold.options!= undefined ? options.threshold.options.greyscale : false,
+      grayscale: options.threshold.options!= undefined ? options.threshold.options.grayscale : false,
+    })
+    else
+    console.error('The treshold must be between 0 and 255')
+  }
+
+  return sharp;
+}
+
+export function createSharpFilter(options?: sharpImageOptions, optionsImageOperations? : sharpImageOperations){
   try{
+  if(!options){
+    options= defaultSharpOptions;
+  }
+  if(!optionsImageOperations)
+  {
+    optionsImageOperations = defaultSharpImageOperations
+  }
   let sharkSharp = sharp().resize(options.width, options.heigth, {fit: options.fit}).toFormat(
     options.outPutFormat,
     {
@@ -101,8 +352,14 @@ export function createSharpFilter(options: sharpImageOptions = defaultSharpOptio
     }
   )
 
+  if(optionsImageOperations.applyImageOperations){
+    console.log("filter")
+    sharkSharp = setSharpImageOperation(sharkSharp, optionsImageOperations);
+  }
 
-  sharkSharp.sharpen(5, 0.5, 3)
+
+  sharkSharp.bandbool(sharp.bool.eor)
+
   return sharkSharp
 }
 catch(e){
@@ -111,12 +368,12 @@ catch(e){
 }
 }
 
-export async function sharpImageProcess(imagePath, options: sharpImageOptions , name, res  ) { 
-  console.log('aqui')
+export async function sharpImageProcess(imagePath, name, res, options?: sharpImageOptions, optionsImageOperations?: sharpImageOperations,   ) { 
+
    try{
      let fileType = options? options.outPutFormat : defaultSharpOptions.outPutFormat
      let fileImage = readFilePassedBy(imagePath)
-     console.log('aqui1')
+ 
      fileImage.on('error', (e) => {
        if(e){
         console.log('File not found')
@@ -133,8 +390,9 @@ export async function sharpImageProcess(imagePath, options: sharpImageOptions , 
       res.set({"Content-Type": `image/${fileType}`, "Content-Disposition": `filename=${name}`})
      })
        
-     console.log('aqui2')
-     let sharpFilter = createSharpFilter()
+        let sharpFilter = createSharpFilter(options? options : undefined, optionsImageOperations? optionsImageOperations : undefined
+
+     )
 
     
 
@@ -361,7 +619,7 @@ export class ItemController {
 
      
       
-      return sharpImageProcess(join(process.cwd(), image_destination_path, imageData.relativePath, 'original' ,imageData.originalName), null , imageData.originalName, res)
+      return sharpImageProcess(join(process.cwd(), image_destination_path, imageData.relativePath, 'original' ,imageData.originalName), imageData.originalName, res, null , null)
       
     }
     @Get('image_stream/:imageName')
